@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Voter Receipt</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script>
+        // Apply theme toggle immediately if set
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        if (savedTheme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    </script>
+</head>
+<body>
+
+<div class="container" style="max-width: 500px;">
+    
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flash-messages">
+        {% for category, message in messages %}
+          <li class="flash-message flash-{{ category }}">{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <div class="receipt-ticket">
+        <h2 style="margin-bottom: 5px;">🎟️ Official Ballot Receipt</h2>
+        <p style="text-align:center; color: var(--text-secondary); margin-bottom: 30px;">This is your unalterable proof of vote.</p>
+        
+        <div class="receipt-row">
+            <span>Voter Identity:</span>
+            <strong>@{{ username }}</strong>
+        </div>
+        
+        <div class="receipt-row">
+            <span>Candidate Selected:</span>
+            <strong>{{ log.candidate_name }}</strong>
+        </div>
+        
+        <div class="receipt-row">
+            <span>Timestamp (UTC):</span>
+            <strong>{{ log.timestamp }}</strong>
+        </div>
+        
+        <div class="receipt-row" style="border-bottom: none; margin-bottom: 20px;">
+            <span>Cryptographic ID:</span>
+            <strong style="color: var(--primary); font-family: monospace; font-size: 1.1rem; word-break: break-all;">{{ log.receipt_id }}</strong>
+        </div>
+        
+        <button onclick="window.print()" style="margin-bottom: 15px; background: var(--secondary);">🖨️ Download as PDF</button>
+        <a href="/results" class="nav-link" style="display:block; text-align:center;">Proceed to Live Results &rarr;</a>
+    </div>
+</div>
+
+</body>
+</html>

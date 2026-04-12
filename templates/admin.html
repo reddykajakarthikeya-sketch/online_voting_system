@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Multi-Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        if (savedTheme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', currentTheme);
+            localStorage.setItem('theme', currentTheme);
+        }
+    </script>
+</head>
+<body>
+<button class="theme-toggle-btn" onclick="toggleTheme()">🌗 Theme</button>
+
+<div class="container admin-container">
+    <h2>🛠️ System Command Center</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flash-messages">
+        {% for category, message in messages %}
+          <li class="flash-message flash-{{ category }}">{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <div style="display: flex; gap: 20px; flex-wrap: wrap;">
+        <!-- Candidates Panel -->
+        <div style="flex: 1; min-width: 280px; background: var(--input-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
+            <h3 style="margin-top:0;">👥 Candidate Roster</h3>
+            <ul style="list-style: none; padding:0;">
+                {% for c in candidates %}
+                <li style="display: flex; justify-content: space-between; align-items: center; padding: 10px; background: var(--container-bg); border: 1px solid var(--border-color); border-radius: 8px; margin-bottom: 8px;">
+                    <div><img src="{{ url_for('static', filename=c.avatar_file) }}" style="width:24px; height:24px; border-radius:50%; vertical-align:middle; margin-right:8px;"><strong>{{ c.name }}</strong> ({{ c.votes }} votes)</div>
+                    <form action="/admin/candidate/delete/{{ c.id }}" method="POST" style="margin:0;" onsubmit="return confirm('Delete candidate permanently?');">
+                        <button type="submit" class="btn-revoke" style="padding: 4px 8px; font-size: 0.8rem;">Delete</button>
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+            <form action="/admin/candidate/add" method="POST" style="display:flex; gap:10px;">
+                <input type="text" name="name" placeholder="New Candidate..." required style="flex:1;">
+                <button type="submit" style="width: auto; margin:0; padding:10px 15px;">Add</button>
+            </form>
+        </div>
+
+        <!-- Settings Panel -->
+        <div style="flex: 1; min-width: 280px; background: var(--input-bg); padding: 20px; border-radius: 12px; border: 1px solid var(--border-color);">
+            <h3 style="margin-top:0;">⏳ Election Deadline</h3>
+            <p style="font-size: 0.9rem; color: var(--text-secondary);">Set the exact ISO timestamp when voting will automatically lock down.</p>
+            <form action="/admin/settings/deadline" method="POST">
+                <input type="datetime-local" name="deadline" value="{{ deadline }}" required>
+                <button type="submit">Update Timer</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Audit Logs -->
+    <h3 style="margin-top:40px;">🔍 Live Audit Logs</h3>
+    <a href="/admin/export" class="nav-link" style="display:inline-block; margin-bottom: 15px; font-weight:bold; color: var(--secondary);">📥 Download CSV Archives</a>
+    
+    <div style="overflow-x:auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Log ID</th>
+                    <th>Date/Time</th>
+                    <th>Voter ID</th>
+                    <th>Candidate</th>
+                    <th>Snapshot</th>
+                    <th>IP Origin</th>
+                    <th>Security Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td style="font-family: monospace; color: var(--border-color); filter: invert(0.5); font-size: 0.85rem;">{{ log.receipt_id[-8:] }}</td>
+                    <td>{{ log.timestamp }}</td>
+                    <td><strong>@{{ log.username }}</strong></td>
+                    <td>{{ log.candidate_name }}</td>
+                    <td>
+                        {% if log.photo_filename %}
+                        <img src="{{ url_for('static', filename='uploads/' + log.photo_filename) }}" style="width: 60px; border-radius: 5px; border: 1px solid var(--border-color);">
+                        {% else %}
+                        <span style="color: grey; font-size: 0.8rem;">No Photo</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {{ log.ip_address }}
+                        {% if log.ip_address in suspicious_ips %}
+                            <span class="badge">FLAGGED: MULTIPLE</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form action="/revoke_vote/{{ log.id }}" method="POST" onsubmit="return confirm('WARNING: This permanently deletes this vote. Proceed?');">
+                            <button type="submit" class="btn-revoke">Revoke</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    <div class="footer-link" style="margin-top: 30px;">
+        <a href="/">Exit Dashboard</a>
+    </div>
+</div>
+</body>
+</html>

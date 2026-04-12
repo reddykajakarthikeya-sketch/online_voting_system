@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vote Now | Premium Election</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        if (savedTheme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', currentTheme);
+            localStorage.setItem('theme', currentTheme);
+        }
+    </script>
+</head>
+<body>
+
+<button class="theme-toggle-btn" onclick="toggleTheme()">🌗 Theme</button>
+
+<div class="container" style="max-width: 600px;">
+    <h2>Cast Your Ballot</h2>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flash-messages">
+        {% for category, message in messages %}
+          <li class="flash-message flash-{{ category }}">{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <div class="countdown-box">
+        <div style="font-size: 0.9rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;">Voting Deadline</div>
+        <div class="countdown-time" id="countdown">Loading...</div>
+    </div>
+
+    {% if is_open and not has_voted %}
+    <form action="/cast_vote" method="POST" id="vote-form">
+        <label style="margin-bottom: 15px; font-size: 1.1rem;">Select your Candidate:</label>
+        
+        <div class="candidate-grid">
+            {% for candidate in candidates %}
+            <label class="candidate-card" onclick="selectCard(this)">
+                <input type="radio" name="candidate" value="{{ candidate.id }}" required>
+                <img src="{{ url_for('static', filename=candidate.avatar_file) }}" alt="{{ candidate.name }}">
+                <span style="font-weight: bold; font-size: 1.1rem;">{{ candidate.name }}</span>
+            </label>
+            {% endfor %}
+        </div>
+
+        <div style="margin-bottom: 20px; text-align: center;">
+            <label style="display: block; margin-bottom: 10px; font-weight: bold;">Face Verification Required</label>
+            <video id="camera-preview" autoplay playsinline style="width: 100%; max-width: 300px; border-radius: 10px; border: 2px solid var(--border-color);"></video>
+            <canvas id="camera-canvas" style="display: none;"></canvas>
+            <input type="hidden" name="voter_photo" id="voter_photo">
+            <p id="camera-status" style="color: var(--danger); font-size: 0.9rem; margin-top: 5px;">Camera access required to vote.</p>
+        </div>
+
+        <button type="submit">Submit Secure Vote</button>
+    </form>
+    {% else %}
+        {% if has_voted %}
+            <div style="text-align:center; padding: 30px; background: rgba(16,185,129,0.1); border-radius: 15px; margin-bottom: 20px;">
+                <h3 style="color: var(--secondary); margin-top: 0;">✅ Vote Recorded</h3>
+                <p>You have successfully cast your vote.</p>
+                <a href="/receipt" class="nav-link">View Digital Receipt</a>
+            </div>
+        {% else %}
+            <div style="text-align:center; padding: 30px; background: rgba(239,68,68,0.1); border-radius: 15px; margin-bottom: 20px;">
+                <h3 style="color: var(--danger); margin-top: 0;">⏳ Election Closed</h3>
+                <p>The deadline has passed and voting is now locked.</p>
+            </div>
+        {% endif %}
+    {% endif %}
+
+    <div class="footer-link">
+        <a href="/results" style="margin-right: 15px;">Live Results</a>
+        <a href="/logout">Logout</a>
+    </div>
+</div>
+
+<script>
+let stream = null;
+
+async function startCamera() {
+    try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        document.getElementById('camera-preview').srcObject = stream;
+        document.getElementById('camera-status').style.color = 'var(--secondary)';
+        document.getElementById('camera-status').innerText = 'Camera active.';
+    } catch (err) {
+        console.error("Camera error:", err);
+        document.getElementById('camera-status').innerText = 'Error accessing camera. Please allow permissions.';
+    }
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+    if (document.getElementById('vote-form')) {
+        startCamera();
+        
+        document.getElementById('vote-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            const video = document.getElementById('camera-preview');
+            const canvas = document.getElementById('camera-canvas');
+            const voterPhotoInput = document.getElementById('voter_photo');
+            
+            if (!stream) {
+                alert("Please allow camera access to submit your vote.");
+                return;
+            }
+
+            // Capture photo
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+            voterPhotoInput.value = canvas.toDataURL('image/jpeg', 0.8);
+            
+            // Submit form
+            this.submit();
+        });
+    }
+});
+
+function selectCard(element) {
+    document.querySelectorAll('.candidate-card').forEach(card => card.classList.remove('selected'));
+    element.classList.add('selected');
+}
+
+// Live Countdown Logic
+setInterval(async () => {
+    try {
+        const response = await fetch('/api/deadline');
+        const data = await response.json();
+        const display = document.getElementById('countdown');
+        if (!data.deadline) {
+            display.innerText = "No Deadline";
+            return;
+        }
+        
+        const dest = new Date(data.deadline).getTime();
+        const now = new Date().getTime();
+        const diff = dest - now;
+        
+        if (diff <= 0) {
+            display.innerText = "00:00:00";
+            if(data.isOpen === false && document.querySelector('form')) {
+                window.location.reload(); // Reload to hide form securely
+            }
+            return;
+        }
+        
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const secs = Math.floor((diff % (1000 * 60)) / 1000);
+        display.innerText = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    } catch (e) {
+        console.error(e);
+    }
+}, 1000);
+</script>
+
+</body>
+</html>

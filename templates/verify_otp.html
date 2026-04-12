@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Mobile OTP</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+<div class="container" style="max-width: 400px;">
+    <h2>📱 Security Verification</h2>
+    <p style="text-align:center; margin-bottom: 25px; color:#475569; line-height: 1.5;">We sent a 6-digit confirmation code to the mobile number associated with <strong>{{ username }}</strong>. Please enter it below.</p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <ul class="flash-messages">
+        {% for category, message in messages %}
+          <li class="flash-message flash-{{ category }}">{{ message }}</li>
+        {% endfor %}
+        </ul>
+      {% endif %}
+    {% endwith %}
+
+    <form method="POST">
+        <div class="form-group">
+            <label for="otp">6-Digit Code</label>
+            <input type="text" id="otp" name="otp" pattern="\d{6}" maxlength="6" placeholder="000000" required style="letter-spacing: 5px; font-size: 1.5rem; text-align: center; font-weight: bold;">
+        </div>
+        <button type="submit" style="background: linear-gradient(135deg, #10b981, #059669);">Verify My Device</button>
+    </form>
+    
+    <div class="footer-link">
+        <a href="/">Wait, let me start over</a>
+    </div>
+</div>
+
+</body>
+</html>

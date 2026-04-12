@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live Election Results</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        if (savedTheme === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            document.documentElement.setAttribute('data-theme', currentTheme);
+            localStorage.setItem('theme', currentTheme);
+        }
+    </script>
+</head>
+<body>
+
+<button class="theme-toggle-btn" onclick="toggleTheme()">🌗 Theme</button>
+
+<div class="container" style="max-width: 700px;">
+    <h2>Live Election Broadcast</h2>
+
+    <div class="countdown-box" style="margin-bottom: 20px;">
+        <div style="font-size: 0.9rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase;"><span style="color:#ef4444;">🔴 LIVE</span> &nbsp;|&nbsp; Remaining Time</div>
+        <div class="countdown-time" id="countdown">Loading...</div>
+    </div>
+    
+    <div style="background: var(--input-bg); padding: 20px; border-radius: 15px; border: 1px solid var(--border-color); margin-bottom: 20px;">
+        <canvas id="resultsChart"></canvas>
+    </div>
+
+    <div class="footer-link">
+        <a href="/">Back to Home</a>
+    </div>
+</div>
+
+<script>
+// Chart Setup
+const ctx = document.getElementById('resultsChart').getContext('2d');
+let resultsChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: [],
+        datasets: [{
+            label: 'Total Votes',
+            data: [],
+            backgroundColor: [
+                'rgba(59, 130, 246, 0.7)',
+                'rgba(16, 185, 129, 0.7)',
+                'rgba(245, 158, 11, 0.7)',
+                'rgba(239, 68, 68, 0.7)',
+                'rgba(139, 92, 246, 0.7)'
+            ],
+            borderColor: [
+                'rgba(59, 130, 246, 1)',
+                'rgba(16, 185, 129, 1)',
+                'rgba(245, 158, 11, 1)',
+                'rgba(239, 68, 68, 1)',
+                'rgba(139, 92, 246, 1)'
+            ],
+            borderWidth: 2,
+            borderRadius: 8
+        }]
+    },
+    options: {
+        responsive: true,
+        animation: {
+            duration: 1000, 
+            easing: 'easeOutQuart'
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: { precision: 0 }
+            }
+        },
+        plugins: {
+            legend: { display: false }
+        }
+    }
+});
+
+// Live Polling Logic (AJAX)
+async function fetchUpdate() {
+    try {
+        const response = await fetch('/api/results');
+        const data = await response.json();
+        
+        resultsChart.data.labels = data.map(item => item.name);
+        resultsChart.data.datasets[0].data = data.map(item => item.votes);
+        resultsChart.update();
+    } catch (e) {
+        console.log("Fetch error:", e);
+    }
+}
+fetchUpdate(); // Initial
+setInterval(fetchUpdate, 2000); // Pulse every 2s
+
+// Live Countdown Logic
+setInterval(async () => {
+    try {
+        const response = await fetch('/api/deadline');
+        const data = await response.json();
+        const display = document.getElementById('countdown');
+        if (!data.deadline) { display.innerText = "No Deadline"; return; }
+        const diff = new Date(data.deadline).getTime() - new Date().getTime();
+        
+        if (diff <= 0) { display.innerText = "00:00:00 (CLOSED)"; return; }
+        
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        const secs = Math.floor((diff % (1000 * 60)) / 1000);
+        display.innerText = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    } catch (e) {}
+}, 1000);
+</script>
+
+</body>
+</html>

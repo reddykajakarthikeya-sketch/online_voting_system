@@ -1,0 +1,161 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap');
+
+:root {
+    --bg-grad-1: #f0fdf4;
+    --bg-grad-2: #e0f2fe;
+    --container-bg: #ffffff;
+    --text-main: #1e293b;
+    --text-secondary: #475569;
+    --input-bg: #f8fafc;
+    --border-color: #e2e8f0;
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+    --secondary: #10b981;
+    --danger: #ef4444;
+}
+
+[data-theme="dark"] {
+    --bg-grad-1: #0f172a;
+    --bg-grad-2: #312e81;
+    --container-bg: rgba(30, 41, 59, 0.8);
+    --text-main: #f8fafc;
+    --text-secondary: #cbd5e1;
+    --input-bg: rgba(15, 23, 42, 0.6);
+    --border-color: rgba(255, 255, 255, 0.1);
+    --primary: #38bdf8;
+    --primary-hover: #0284c7;
+    --secondary: #34d399;
+    --danger: #f87171;
+}
+
+body {
+    font-family: 'Outfit', sans-serif;
+    background: linear-gradient(135deg, var(--bg-grad-1), var(--bg-grad-2));
+    background-attachment: fixed;
+    color: var(--text-main);
+    margin: 0;
+    padding: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    transition: background 0.5s ease;
+}
+
+.container {
+    width: 100%;
+    max-width: 480px;
+    background: var(--container-bg);
+    backdrop-filter: blur(16px);
+    padding: 40px 30px;
+    border-radius: 20px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+    border: 1px solid var(--border-color);
+    box-sizing: border-box;
+    transition: background 0.3s, border-color 0.3s;
+}
+
+h2 {
+    text-align: center;
+    margin-top: 0;
+    margin-bottom: 30px;
+    font-weight: 800;
+    font-size: 2.2rem;
+    color: var(--text-main);
+}
+
+.form-group { margin-bottom: 20px; }
+label {
+    display: block; margin-bottom: 8px; font-weight: 600; font-size: 0.95rem; color: var(--text-secondary);
+}
+
+input, select {
+    width: 100%; padding: 14px; background: var(--input-bg);
+    border: 1px solid var(--border-color); border-radius: 10px;
+    color: var(--text-main); font-size: 1rem; outline: none; transition: all 0.3s; box-sizing: border-box; font-family: inherit;
+}
+input::placeholder { color: #94a3b8; }
+input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.15); }
+option { background-color: var(--container-bg); color: var(--text-main); }
+
+button {
+    width: 100%; padding: 14px; background: var(--primary); color: white;
+    border: none; border-radius: 10px; cursor: pointer; font-size: 1.1rem;
+    font-weight: 600; font-family: inherit; transition: transform 0.2s, box-shadow 0.2s;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-top: 10px;
+}
+button:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.15); background: var(--primary-hover); }
+
+.footer-link { text-align: center; margin-top: 25px; font-size: 0.95rem; }
+a { text-decoration: none; color: var(--primary); font-weight: 600; transition: color 0.3s; }
+a:hover { color: var(--primary-hover); text-decoration: underline; }
+
+.flash-messages { list-style: none; padding: 0; margin: 0 0 20px 0; }
+.flash-message { padding: 12px 15px; border-radius: 8px; margin-bottom: 10px; text-align: center; font-weight: 600; animation: fadeIn 0.4s ease-out; }
+.flash-success { background: rgba(16, 185, 129, 0.1); border: 1px solid var(--secondary); color: var(--secondary); }
+.flash-error { background: rgba(239, 68, 68, 0.1); border: 1px solid var(--danger); color: var(--danger); }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Candidate Photo Grid */
+.candidate-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    gap: 15px;
+    margin-bottom: 25px;
+}
+.candidate-card {
+    background: var(--input-bg);
+    border: 2px solid var(--border-color);
+    border-radius: 15px;
+    padding: 15px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.3s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+.candidate-card img {
+    width: 90px;
+    height: 90px;
+    border-radius: 50%;
+    object-fit: cover;
+    margin-bottom: 10px;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    border: 3px solid var(--container-bg);
+}
+.candidate-card:hover { transform: translateY(-3px); border-color: var(--primary); box-shadow: 0 10px 25px rgba(59, 130, 246, 0.15); }
+.candidate-card input[type="radio"] { display: none; }
+.candidate-card.selected { border-color: var(--primary); background: rgba(59, 130, 246, 0.05); }
+
+/* Receipt Ticket */
+.receipt-ticket {
+    background: var(--input-bg); border: 1px dashed var(--border-color); border-radius: 12px; padding: 25px; margin-bottom: 20px;
+}
+.receipt-row {
+    display: flex; justify-content: space-between; align-items: center;
+    border-bottom: 1px solid var(--border-color); padding: 12px 0;
+}
+.receipt-row:last-child { border-bottom: none; }
+
+/* Admin overrides */
+.admin-container { max-width: 900px; padding: 30px; }
+.admin-container table { width: 100%; border-collapse: collapse; margin-top: 15px; background: var(--container-bg); border-radius: 10px; overflow: hidden; }
+.admin-container th, .admin-container td { padding: 12px; text-align: left; border-bottom: 1px solid var(--border-color); }
+.admin-container th { background: var(--input-bg); font-weight: 600; }
+.badge { background: var(--danger); color: white; padding: 3px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: bold; margin-left: 8px; }
+.btn-revoke { background: var(--danger); padding: 8px 12px; font-size: 0.9rem; margin: 0; width: auto; }
+.btn-revoke:hover { background: #dc2626; }
+
+/* Countdown */
+.countdown-box {
+    text-align: center; padding: 15px; background: var(--input-bg); border-radius: 12px; border: 1px solid var(--border-color); margin-bottom: 25px;
+}
+.countdown-time { font-size: 2rem; font-weight: 800; color: var(--primary); font-variant-numeric: tabular-nums; letter-spacing: 2px;}
+
+/* Theme Toggle */
+.theme-toggle-btn {
+    position: fixed; top: 20px; right: 20px; background: var(--container-bg); border: 1px solid var(--border-color);
+    padding: 10px 15px; border-radius: 20px; cursor: pointer; color: var(--text-main); font-weight: bold;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: auto; font-size: 1rem; z-index: 1000;
+}
