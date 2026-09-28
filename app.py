@@ -5,9 +5,25 @@ import random
 import uuid
 import base64
 from datetime import datetime
+from deepface import DeepFace
+from werkzeug.security import generate_password_hash, check_password_hash
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 app = Flask(__name__)
-app.secret_key = "voting_secret_platinum"
+app.secret_key = os.environ.get("FLASK_SECRET_KEY", "voting_secret_platinum")
+
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+limiter = Limiter(get_remote_address, app=app)
+
+@app.after_request
+def add_security_headers(response):
+    response.headers['X-Frame-Options'] = 'SAMEORIGIN'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    return response
+
 DB_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "database.db")
 os.makedirs(os.path.join(app.root_path, "static", "uploads"), exist_ok=True)
 
@@ -84,11 +100,11 @@ def init_db():
     cursor.execute("SELECT COUNT(*) FROM users")
     if cursor.fetchone()[0] == 0:
         default_users = [
-            ("Admin", "System", 30, "admin@example.com", "Other", "admin", "admin123", "0000000000", "000000", 1),
-            ("Harshith", "User", 20, "harshith@example.com", "Male", "harshith", "password123", "1111111111", "000000", 1),
-            ("Pragnay", "User", 20, "pragnay@example.com", "Male", "pragnay", "password123", "2222222222", "000000", 1),
-            ("Yashwnath", "User", 20, "yashwnath@example.com", "Male", "yashwnath", "password123", "3333333333", "000000", 1),
-            ("Chandra", "User", 20, "chandra@example.com", "Male", "chandra", "password123", "4444444444", "000000", 1)
+            ("Admin", "System", 30, "admin@example.com", "Other", "admin", generate_password_hash("admin123"), "0000000000", "000000", 1),
+            ("Harshith", "User", 20, "harshith@example.com", "Male", "harshith", generate_password_hash("password123"), "1111111111", "000000", 1),
+            ("Pragnay", "User", 20, "pragnay@example.com", "Male", "pragnay", generate_password_hash("password123"), "2222222222", "000000", 1),
+            ("Yashwnath", "User", 20, "yashwnath@example.com", "Male", "yashwnath", generate_password_hash("password123"), "3333333333", "000000", 1),
+            ("Chandra", "User", 20, "chandra@example.com", "Male", "chandra", generate_password_hash("password123"), "4444444444", "000000", 1)
         ]
         cursor.executemany('''
         INSERT INTO users (firstname, lastname, age, email, gender, username, password, phone_number, otp_code, is_verified)
@@ -108,6 +124,7 @@ def home():
     return render_template("login.html")
 
 @app.route("/register", methods=["GET","POST"])
+@limiter.limit("3 per minute")
 def register():
     if request.method == "POST":
         firstname = request.form["firstname"]
@@ -117,6 +134,8 @@ def register():
         gender = request.form["gender"]
         username = request.form["username"]
         password = request.form["password"]
+        
+        hashed_password = generate_password_hash(password)
 
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -125,7 +144,7 @@ def register():
             cursor.execute('''
             INSERT INTO users (firstname, lastname, age, email, gender, username, password, phone_number, otp_code, is_verified)
             VALUES (?,?,?,?,?,?,?,NULL,NULL,1)
-            ''', (firstname, lastname, age, email, gender, username, password))
+            ''', (firstname, lastname, age, email, gender, username, hashed_password))
             conn.commit()
             
             flash("Account successfully created! You may now log in.", "success")
@@ -167,17 +186,18 @@ def verify_otp():
     return render_template("verify_otp.html", username=username)
 
 @app.route("/login", methods=["POST"])
+@limiter.limit("5 per minute")
 def login():
     username = request.form["username"]
     password = request.form["password"]
 
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE username=? AND password=?", (username, password))
+    cursor.execute("SELECT * FROM users WHERE username=?", (username,))
     user = cursor.fetchone()
     conn.close()
 
-    if user:
+    if user and check_password_hash(user["password"], password):
         session["user"] = username
         return redirect("/vote")
     else:
@@ -215,6 +235,7 @@ def vote():
     return render_template("vote.html", candidates=candidates, has_voted=has_voted, is_open=is_open)
 
 @app.route("/cast_vote", methods=["POST"])
+@limiter.limit("1 per second")
 def cast_vote():
     if "user" not in session: return redirect("/")
     
@@ -231,11 +252,13 @@ def cast_vote():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    user_data = cursor.execute("SELECT voted FROM users WHERE username=?", (username,)).fetchone()
+    user_data = cursor.execute("SELECT voted, gender FROM users WHERE username=?", (username,)).fetchone()
     if user_data and user_data["voted"] == 1:
         flash("You already voted! You cannot vote again.", "error")
         conn.close()
         return redirect("/results")
+        
+    user_gender = user_data["gender"] if user_data else None
 
     receipt_id = "VOTE-" + uuid.uuid4().hex[:10].upper()
     ip_address = request.headers.get('X-Forwarded-For', request.remote_addr)
@@ -250,6 +273,48 @@ def cast_vote():
             photo_path = os.path.join(app.root_path, "static", "uploads", photo_filename)
             with open(photo_path, "wb") as f:
                 f.write(image_data)
+                
+            if user_gender and user_gender.lower() in ['male', 'female']:
+                try:
+                    analysis = DeepFace.analyze(photo_path, actions=['gender'], enforce_detection=False)
+                    # analyze returns a list of dictionaries if multiple faces or just one dictionary depending on backend, typically list for OpenCV backend natively in newer DeepFace
+                    predicted_gender = analysis[0]["dominant_gender"].lower() if isinstance(analysis, list) else analysis["dominant_gender"].lower()
+
+                    mismatch = False
+                    if user_gender.lower() == 'male' and predicted_gender == 'woman':
+                        mismatch = True
+                    elif user_gender.lower() == 'female' and predicted_gender == 'man':
+                        mismatch = True
+
+                    if mismatch:
+                        os.remove(photo_path)
+                        conn.close()
+                        flash("Gender verification failed: Your registered gender does not match the webcam face prediction.", "error")
+                        return redirect("/vote")
+                except Exception as df_err:
+                    print(f"Gender analysis error: {df_err}")
+                
+            existing_photos = cursor.execute("SELECT photo_filename FROM vote_logs WHERE photo_filename IS NOT NULL").fetchall()
+            
+            for row in existing_photos:
+                past_photo_path = os.path.join(app.root_path, "static", "uploads", row["photo_filename"])
+                if os.path.exists(past_photo_path):
+                    try:
+                        result = DeepFace.verify(
+                            img1_path=photo_path,
+                            img2_path=past_photo_path,
+                            detector_backend='opencv',
+                            enforce_detection=False,
+                            model_name='Facenet'
+                        )
+                        if result["verified"]:
+                            os.remove(photo_path)
+                            conn.close()
+                            flash("Face verification failed: This face has already been used to cast a vote under another account!", "error")
+                            return redirect("/vote")
+                    except Exception as df_e:
+                        print(f"Face verification error: {df_e}")
+                        
         except Exception as e:
             print(f"Error saving photo: {e}")
 
@@ -392,4 +457,5 @@ def revoke_vote(log_id):
     return redirect("/admin")
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", debug=True, port=5000)
+    is_debug = os.environ.get("FLASK_DEBUG", "False").lower() == "true"
+    app.run(host="0.0.0.0", debug=is_debug, port=5000)
