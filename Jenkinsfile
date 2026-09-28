@@ -1,6 +1,11 @@
 pipeline {
     agent any
 
+    environment {
+        PYTHONUTF8 = '1'
+        PYTHONIOENCODING = 'utf-8'
+    }
+
     stages {
         stage('Checkout') {
             steps {
