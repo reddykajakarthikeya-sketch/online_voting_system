@@ -5,7 +5,10 @@ import random
 import uuid
 import base64
 from datetime import datetime
-from deepface import DeepFace
+try:
+    from deepface import DeepFace
+except Exception:
+    DeepFace = None
 from werkzeug.security import generate_password_hash, check_password_hash
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
