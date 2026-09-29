@@ -6,6 +6,10 @@ pipeline {
         PYTHONIOENCODING = 'utf-8'
     }
 
+    triggers {
+        pollSCM('H/2 * * * *')
+    }
+
     stages {
         stage('Checkout') {
             steps {
@@ -40,8 +44,8 @@ pipeline {
 
         stage('Automated Testing') {
             steps {
-                echo 'Executing automated unit test suite...'
-                bat 'python -m unittest test_app.py'
+                echo 'Executing automated unit test suite (4 tests)...'
+                bat 'python -m unittest -v test_app.py'
             }
         }
 
@@ -53,12 +57,18 @@ pipeline {
         }
 
         stage('Deploy Approval') {
+            when {
+                branch 'main'
+            }
             steps {
                 input message: 'Do you want to deploy the application to local staging?', ok: 'Deploy'
             }
         }
 
         stage('Deploy Locally (Staging)') {
+            when {
+                branch 'main'
+            }
             steps {
                 echo 'Deploying application to C:\\deploy\\online_voting_system...'
                 bat '''
@@ -77,6 +87,9 @@ pipeline {
         }
 
         stage('Automated Health Check') {
+            when {
+                branch 'main'
+            }
             steps {
                 echo 'Executing automated smoke test on deployed application...'
                 bat '''
@@ -92,10 +105,12 @@ pipeline {
             echo 'Pipeline execution complete.'
         }
         success {
-            echo 'SUCCESS: All CI/CD stages, automated unit tests, deployment, and health checks passed!'
+            echo 'SUCCESS: All CI/CD stages, automated unit tests, and validation passed!'
+            bat 'python scripts/report_status.py success "All 4 unit tests passed on Jenkins CI"'
         }
         failure {
             echo 'FAILURE: One or more pipeline stages failed. Inspect console logs.'
+            bat 'python scripts/report_status.py failure "Jenkins build or unit tests failed"'
         }
     }
 }

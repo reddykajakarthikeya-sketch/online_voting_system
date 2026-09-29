@@ -63,11 +63,32 @@
     </div>
 
     <!-- Audit Logs -->
-    <h3 style="margin-top:40px;">🔍 Live Audit Logs</h3>
-    <a href="/admin/export" class="nav-link" style="display:inline-block; margin-bottom: 15px; font-weight:bold; color: var(--secondary);">📥 Download CSV Archives</a>
-    
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 40px; margin-bottom: 12px; flex-wrap: wrap; gap: 10px;">
+        <h3 style="margin:0;">🔍 Live Audit Logs</h3>
+        <a href="/admin/export" class="nav-link" style="font-weight:bold; color: var(--secondary);">📥 Download CSV Archives</a>
+    </div>
+
+    <!-- Filter & Search Controls -->
+    <div class="audit-filter-bar">
+        <input type="text" id="audit-search" placeholder="🔎 Search username, receipt ID, or IP..." oninput="filterAuditLogs()">
+        <select id="candidate-filter" onchange="filterAuditLogs()">
+            <option value="">All Candidates</option>
+            {% for c in candidates %}
+            <option value="{{ c.name }}">{{ c.name }}</option>
+            {% endfor %}
+        </select>
+        <label class="audit-filter-check">
+            <input type="checkbox" id="suspicious-only" onchange="filterAuditLogs()">
+            ⚠️ Flagged Only
+        </label>
+        <button type="button" class="btn-filter-reset" onclick="resetFilters()">Reset</button>
+        <span id="log-count-badge" style="font-size: 0.85rem; color: var(--text-secondary); margin-left: auto;">
+            Showing <strong id="visible-count">{{ logs|length }}</strong> of {{ logs|length }}
+        </span>
+    </div>
+
     <div style="overflow-x:auto;">
-        <table>
+        <table id="audit-table">
             <thead>
                 <tr>
                     <th>Log ID</th>
@@ -81,7 +102,12 @@
             </thead>
             <tbody>
                 {% for log in logs %}
-                <tr>
+                <tr class="audit-row"
+                    data-username="{{ log.username|lower }}"
+                    data-receipt="{{ log.receipt_id|lower }}"
+                    data-candidate="{{ log.candidate_name }}"
+                    data-ip="{{ log.ip_address }}"
+                    data-flagged="{% if log.ip_address in suspicious_ips %}true{% else %}false{% endif %}">
                     <td style="font-family: monospace; color: var(--border-color); filter: invert(0.5); font-size: 0.85rem;">{{ log.receipt_id[-8:] }}</td>
                     <td>{{ log.timestamp }}</td>
                     <td><strong>@{{ log.username }}</strong></td>
@@ -106,9 +132,59 @@
                     </td>
                 </tr>
                 {% endfor %}
+                <tr id="no-records-row" style="display: none;">
+                    <td colspan="7" style="text-align: center; padding: 25px; color: var(--text-secondary);">
+                        No audit records match the current search and filter criteria.
+                    </td>
+                </tr>
             </tbody>
         </table>
     </div>
+
+    <script>
+    function filterAuditLogs() {
+        const query = (document.getElementById('audit-search').value || '').trim().toLowerCase();
+        const candidate = (document.getElementById('candidate-filter').value || '').trim();
+        const flaggedOnly = document.getElementById('suspicious-only').checked;
+
+        const rows = document.querySelectorAll('.audit-row');
+        let visibleCount = 0;
+
+        rows.forEach(row => {
+            const username = row.getAttribute('data-username') || '';
+            const receipt = row.getAttribute('data-receipt') || '';
+            const cand = row.getAttribute('data-candidate') || '';
+            const ip = row.getAttribute('data-ip') || '';
+            const isFlagged = row.getAttribute('data-flagged') === 'true';
+
+            const matchesQuery = !query || username.includes(query) || receipt.includes(query) || ip.includes(query);
+            const matchesCandidate = !candidate || cand === candidate;
+            const matchesFlagged = !flaggedOnly || isFlagged;
+
+            if (matchesQuery && matchesCandidate && matchesFlagged) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        const countBadge = document.getElementById('visible-count');
+        if (countBadge) countBadge.innerText = visibleCount;
+
+        const noRecordsRow = document.getElementById('no-records-row');
+        if (noRecordsRow) {
+            noRecordsRow.style.display = (visibleCount === 0 && rows.length > 0) ? '' : 'none';
+        }
+    }
+
+    function resetFilters() {
+        document.getElementById('audit-search').value = '';
+        document.getElementById('candidate-filter').value = '';
+        document.getElementById('suspicious-only').checked = false;
+        filterAuditLogs();
+    }
+    </script>
 
     <div class="footer-link" style="margin-top: 30px;">
         <a href="/">Exit Dashboard</a>
