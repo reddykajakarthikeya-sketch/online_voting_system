@@ -455,8 +455,8 @@ We welcome contributions! Please adhere to our standardized process:
 Developed as an open academic, educational, and secure voting system research project.
 
 ### Project Team & Contributors
-* **Pragnay** ([@Pragnay869](https://github.com/Pragnay869))
-* **Karthikeya Reddy** ([@reddykajakarthikeya-sketch](https://github.com/reddykajakarthikeya-sketch))
-* **Bhargav**
-* **Saketh**
+* **Pragnay** ([@Pragnay869](https://github.com/Pragnay869)) - *Technical Documentation & Architecture*
+* **Karthikeya Reddy** ([@reddykajakarthikeya-sketch](https://github.com/reddykajakarthikeya-sketch)) - *DevOps & CI/CD Pipeline*
+* **Bhargav** - *Frontend & Interface Design*
+* **Saketh** - *Core Application & Authentication*
 
