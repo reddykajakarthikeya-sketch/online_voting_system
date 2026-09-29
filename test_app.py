@@ -63,5 +63,15 @@ class OnlineVotingSystemTests(unittest.TestCase):
         self.assertIn('vote_logs', tables)
         conn.close()
 
+    def test_admin_audit_filter_integration(self):
+        """Verify that admin template contains search, filter, and count elements."""
+        with open(os.path.join('templates', 'admin.html'), 'r', encoding='utf-8') as f:
+            content = f.read()
+        self.assertIn('id="audit-search"', content)
+        self.assertIn('id="candidate-filter"', content)
+        self.assertIn('id="suspicious-only"', content)
+        self.assertIn('filterAuditLogs', content)
+
 if __name__ == '__main__':
     unittest.main()
+
