@@ -80,6 +80,11 @@ def init_db():
     except sqlite3.OperationalError:
         pass
 
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN lastname TEXT DEFAULT ''")
+    except sqlite3.OperationalError:
+        pass
+
     cursor.execute('''
     CREATE TABLE IF NOT EXISTS settings (
         key TEXT PRIMARY KEY,
@@ -130,14 +135,30 @@ def home():
 @limiter.limit("3 per minute")
 def register():
     if request.method == "POST":
-        firstname = request.form["firstname"]
-        lastname = request.form["lastname"]
-        age = request.form["age"]
-        email = request.form["email"]
-        gender = request.form["gender"]
-        username = request.form["username"]
-        password = request.form["password"]
+        firstname = request.form.get("firstname", "").strip()
+        lastname = request.form.get("lastname", "").strip()
+        age = request.form.get("age", "").strip()
+        email = request.form.get("email", "").strip()
+        gender = request.form.get("gender", "").strip()
+        username = request.form.get("username", "").strip()
+        password = request.form.get("password", "")
         
+        if not firstname or len(firstname) > 50:
+            flash("Please provide a valid first name (1-50 characters).", "error")
+            return render_template("register.html")
+
+        if not lastname or len(lastname) > 50:
+            flash("Please provide a valid last name (1-50 characters).", "error")
+            return render_template("register.html")
+
+        if not username or len(username) < 3 or len(username) > 50:
+            flash("Username must be between 3 and 50 characters.", "error")
+            return render_template("register.html")
+
+        if not password or len(password) < 6:
+            flash("Password must be at least 6 characters.", "error")
+            return render_template("register.html")
+
         hashed_password = generate_password_hash(password)
 
         conn = get_db_connection()
@@ -343,8 +364,11 @@ def receipt():
     conn = get_db_connection()
     cursor = conn.cursor()
     log = cursor.execute('''
-        SELECT v.receipt_id, v.timestamp, c.name as candidate_name 
-        FROM vote_logs v JOIN candidates c ON v.candidate_id = c.id
+        SELECT v.receipt_id, v.timestamp, c.name as candidate_name,
+               COALESCE(u.firstname, '') as firstname, COALESCE(u.lastname, '') as lastname
+        FROM vote_logs v 
+        JOIN candidates c ON v.candidate_id = c.id
+        LEFT JOIN users u ON v.username = u.username
         WHERE v.receipt_id = ?
     ''', (session["receipt_id"],)).fetchone()
     conn.close()
@@ -378,8 +402,12 @@ def admin():
     
     conn = get_db_connection()
     logs = conn.execute('''
-        SELECT v.id, v.receipt_id, v.username, v.ip_address, v.timestamp, v.photo_filename, c.name as candidate_name 
-        FROM vote_logs v JOIN candidates c ON v.candidate_id = c.id ORDER BY v.timestamp DESC
+        SELECT v.id, v.receipt_id, v.username, v.ip_address, v.timestamp, v.photo_filename, c.name as candidate_name,
+               COALESCE(u.firstname, '') as firstname, COALESCE(u.lastname, '') as lastname
+        FROM vote_logs v 
+        JOIN candidates c ON v.candidate_id = c.id 
+        LEFT JOIN users u ON v.username = u.username
+        ORDER BY v.timestamp DESC
     ''').fetchall()
     
     suspicious_ips = [row["ip_address"] for row in conn.execute('''
@@ -397,15 +425,20 @@ def export_csv():
     if session.get("user") != "admin": return redirect("/")
     conn = get_db_connection()
     logs = conn.execute('''
-        SELECT v.receipt_id, v.timestamp, v.username, c.name, v.ip_address
-        FROM vote_logs v JOIN candidates c ON v.candidate_id = c.id ORDER BY v.timestamp DESC
+        SELECT v.receipt_id, v.timestamp, v.username, c.name, v.ip_address,
+               COALESCE(u.firstname, '') as firstname, COALESCE(u.lastname, '') as lastname
+        FROM vote_logs v 
+        JOIN candidates c ON v.candidate_id = c.id 
+        LEFT JOIN users u ON v.username = u.username
+        ORDER BY v.timestamp DESC
     ''').fetchall()
     conn.close()
 
     def generate():
-        data = ["Receipt ID,Timestamp,Username,Candidate Picked,IP Address\n"]
+        data = ["Receipt ID,Timestamp,Username,Full Name,Candidate Picked,IP Address\n"]
         for log in logs:
-            data.append(f"{log['receipt_id']},{log['timestamp']},{log['username']},{log['name']},{log['ip_address']}\n")
+            full_name = f"{log['firstname']} {log['lastname']}".strip()
+            data.append(f"{log['receipt_id']},{log['timestamp']},{log['username']},{full_name},{log['name']},{log['ip_address']}\n")
         return "".join(data)
 
     return Response(generate(), mimetype="text/csv", headers={"Content-disposition": "attachment; filename=vote_logs.csv"})
