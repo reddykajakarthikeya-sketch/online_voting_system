@@ -72,6 +72,63 @@ class OnlineVotingSystemTests(unittest.TestCase):
         self.assertIn('id="suspicious-only"', content)
         self.assertIn('filterAuditLogs', content)
 
+    def test_registration_last_name_validation(self):
+        """Verify that registration requires a valid, non-empty last name."""
+        from app import app
+        client = app.test_client()
+        response = client.post('/register', data={
+            'firstname': 'John',
+            'lastname': '   ',
+            'age': '25',
+            'gender': 'Male',
+            'email': 'john@example.com',
+            'username': 'john_empty_last',
+            'password': 'password123'
+        })
+        self.assertIn(b'Please provide a valid last name', response.data)
+
+    def test_registration_last_name_persistence(self):
+        """Verify that last name is correctly persisted to the database on registration."""
+        from app import app, get_db_connection
+        client = app.test_client()
+        uname = 'testuser_lastname'
+        response = client.post('/register', data={
+            'firstname': 'Karthikeya',
+            'lastname': 'Reddy',
+            'age': '22',
+            'gender': 'Male',
+            'email': 'karthik_ln@example.com',
+            'username': uname,
+            'password': 'password123'
+        }, follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+
+        conn = get_db_connection()
+        user = conn.execute("SELECT firstname, lastname FROM users WHERE username = ?", (uname,)).fetchone()
+        conn.close()
+        self.assertIsNotNone(user)
+        self.assertEqual(user['firstname'], 'Karthikeya')
+        self.assertEqual(user['lastname'], 'Reddy')
+
+    def test_backward_compatibility_existing_users(self):
+        """Verify backward compatibility: legacy user records without lastname still authenticate and function."""
+        from app import app, get_db_connection
+        from werkzeug.security import generate_password_hash
+        conn = get_db_connection()
+        legacy_uname = 'legacy_voter_test'
+        conn.execute("DELETE FROM users WHERE username = ?", (legacy_uname,))
+        conn.execute('''
+            INSERT INTO users (firstname, lastname, age, email, gender, username, password, is_verified)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+        ''', ('Legacy', '', 30, 'legacy@example.com', 'Other', legacy_uname, generate_password_hash('legacy123')))
+        conn.commit()
+        conn.close()
+
+        client = app.test_client()
+        login_res = client.post('/login', data={'username': legacy_uname, 'password': 'legacy123'})
+        self.assertEqual(login_res.status_code, 302)
+        self.assertIn('/vote', login_res.headers['Location'])
+
 if __name__ == '__main__':
     unittest.main()
 

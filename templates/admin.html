@@ -104,13 +104,19 @@
                 {% for log in logs %}
                 <tr class="audit-row"
                     data-username="{{ log.username|lower }}"
+                    data-fullname="{{ (log.firstname + ' ' + log.lastname)|lower }}"
                     data-receipt="{{ log.receipt_id|lower }}"
                     data-candidate="{{ log.candidate_name }}"
                     data-ip="{{ log.ip_address }}"
                     data-flagged="{% if log.ip_address in suspicious_ips %}true{% else %}false{% endif %}">
                     <td style="font-family: monospace; color: var(--border-color); filter: invert(0.5); font-size: 0.85rem;">{{ log.receipt_id[-8:] }}</td>
                     <td>{{ log.timestamp }}</td>
-                    <td><strong>@{{ log.username }}</strong></td>
+                    <td>
+                        <strong>@{{ log.username }}</strong>
+                        {% if log.lastname %}
+                        <br><small style="color: var(--text-secondary);">{{ log.firstname }} {{ log.lastname }}</small>
+                        {% endif %}
+                    </td>
                     <td>{{ log.candidate_name }}</td>
                     <td>
                         {% if log.photo_filename %}
@@ -152,12 +158,13 @@
 
         rows.forEach(row => {
             const username = row.getAttribute('data-username') || '';
+            const fullname = row.getAttribute('data-fullname') || '';
             const receipt = row.getAttribute('data-receipt') || '';
             const cand = row.getAttribute('data-candidate') || '';
             const ip = row.getAttribute('data-ip') || '';
             const isFlagged = row.getAttribute('data-flagged') === 'true';
 
-            const matchesQuery = !query || username.includes(query) || receipt.includes(query) || ip.includes(query);
+            const matchesQuery = !query || username.includes(query) || fullname.includes(query) || receipt.includes(query) || ip.includes(query);
             const matchesCandidate = !candidate || cand === candidate;
             const matchesFlagged = !flaggedOnly || isFlagged;
 

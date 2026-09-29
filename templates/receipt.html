@@ -31,7 +31,7 @@
         
         <div class="receipt-row">
             <span>Voter Identity:</span>
-            <strong>@{{ username }}</strong>
+            <strong>@{{ username }}{% if log.firstname or log.lastname %} ({{ log.firstname }} {{ log.lastname }}){% endif %}</strong>
         </div>
         
         <div class="receipt-row">
