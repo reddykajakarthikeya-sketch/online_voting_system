@@ -1,181 +1,191 @@
 # Online Voting System with Biometric Facial Verification & Jenkins CI/CD
 
-An end-to-end secure electronic voting web application engineered with Python and Flask, featuring facial biometric verification, one-time password (OTP) two-factor authentication, administrative oversight, and an automated continuous integration and continuous deployment (CI/CD) pipeline powered by Jenkins and Git/GitHub.
+An enterprise-grade, secure electronic voting web application engineered with Python and Flask. The platform features biometric facial verification via DeepFace, cross-voter face deduplication, gender consistency checks, administrative fraud auditing with IP anomaly detection, and a fully automated continuous integration and continuous deployment (CI/CD) pipeline orchestrated with Jenkins and GitHub.
 
 ---
 
 ## Table of Contents
 - [1. Project Overview](#1-project-overview)
-- [2. Features](#2-features)
+- [2. Key Features](#2-key-features)
+  - [Voter Authentication & Security](#voter-authentication--security)
+  - [Biometric Verification & Anti-Impersonation](#biometric-verification--anti-impersonation)
+  - [Ballot Casting & Election Lifecycle](#ballot-casting--election-lifecycle)
+  - [Real-Time Results & Live Analytics](#real-time-results--live-analytics)
+  - [Administrative Governance & Fraud Auditing](#administrative-governance--fraud-auditing)
 - [3. Technology Stack](#3-technology-stack)
-- [4. Project Architecture](#4-project-architecture)
-- [5. Project Structure](#5-project-structure)
-- [6. Installation and Setup](#6-installation-and-setup)
-- [7. Usage & Application Workflows](#7-usage--application-workflows)
+- [4. System Architecture](#4-system-architecture)
+- [5. Repository Structure](#5-repository-structure)
+- [6. Installation & Local Setup](#6-installation--local-setup)
+  - [Prerequisites](#prerequisites)
+  - [Step-by-Step Installation](#step-by-step-installation)
+  - [Default Pre-seeded Credentials](#default-pre-seeded-credentials)
+- [7. Application Usage & Workflows](#7-application-usage--workflows)
+  - [Standard Voter Workflow](#standard-voter-workflow)
+  - [Administrator Governance Workflow](#administrator-governance-workflow)
 - [8. GitHub Collaboration Workflow](#8-github-collaboration-workflow)
 - [9. Jenkins CI/CD Pipeline](#9-jenkins-cicd-pipeline)
-- [10. Continuous Deployment (CD)](#10-continuous-deployment-cd)
-- [11. Testing](#11-testing)
-- [12. Troubleshooting Guide](#12-troubleshooting-guide)
+  - [Pipeline Architecture & Stages](#pipeline-architecture--stages)
+  - [Windows UTF-8 Encoding Fix](#windows-utf-8-encoding-fix)
+  - [Jenkins Job Configuration](#jenkins-job-configuration)
+- [10. Continuous Deployment (CD) & Staging](#10-continuous-deployment-cd--staging)
+- [11. Automated Testing Suite](#11-automated-testing-suite)
+- [12. Troubleshooting & Diagnostics](#12-troubleshooting--diagnostics)
 - [13. Contributing Guidelines](#13-contributing-guidelines)
-- [14. License and Acknowledgements](#14-license-and-acknowledgements)
+- [14. License & Credits](#14-license--credits)
 
 ---
 
 ## 1. Project Overview
 
-The **Online Voting System** is designed to address trust, security, and accessibility challenges in electoral processes. Traditional paper ballots and unverified digital polls are vulnerable to duplicate voting, identity spoofing, and lack of real-time auditability.
+The **Online Voting System** provides a tamper-resistant, auditable digital balloting platform designed to resolve identity fraud, double voting, and auditability deficits in modern elections.
 
-This project delivers:
-* **Identity Assurance**: Combines password hashing, phone-based OTP verification, and biometric face verification via DeepFace to ensure voters are physically authenticated before casting a ballot.
-* **Integrity and One-Vote Enforcement**: Guarantees that each voter can only submit a ballot once (`voted = 1`), with detailed timestamped logging in an auditable database.
-* **DevOps Automation**: Employs enterprise-grade CI/CD automation through a multi-stage Declarative `Jenkinsfile` that checks out code from GitHub, validates syntax, installs dependencies, runs automated unit tests, manages a manual approval gate, deploys locally to staging, and executes smoke verification tests.
+### Core Objectives
+* **Identity & Demographic Integrity**: Protect user registration and login with SHA-256 password hashing (Werkzeug), HTTP-only cookies, and IP-based rate limiting.
+* **Biometric Verification at Ballot Submission**: Utilize computer vision and deep learning (`DeepFace` with `Facenet` and `OpenCV`) to enforce:
+  1. **Gender Consistency**: Cross-checks registered demographic gender against real-time facial analytics.
+  2. **Anti-Sybil / Deduplication**: Cross-checks the voter's live webcam snapshot against all historical voting snapshots to prevent one individual from casting votes across multiple user accounts.
+* **Tamper-Evident Receipts**: Issues a cryptographic, unique receipt (`VOTE-<HEX>`) upon ballot confirmation for independent voter verification.
+* **DevOps Excellence**: Automates build validation, syntax compilation, unit testing, manual deployment gating, staging synchronization (`C:\deploy\online_voting_system`), and automated HTTP smoke checks via a declarative 9-stage Jenkins pipeline.
 
 ---
 
-## 2. Features
+## 2. Key Features
 
-### 👤 User Registration & Biometrics
-* **Demographic Collection**: Captures name, age, gender, email, phone number, and unique username.
-* **Biometric Face Capture**: Captures and saves the user's reference portrait to `static/uploads/` during registration.
-* **Credential Security**: Passwords are encrypted using Werkzeug's SHA-256 password hashing routines (`generate_password_hash`).
+### Voter Authentication & Security
+* **User Registration (`/register`)**: Collects first name, last name, age, gender, email, username, and password. Rate-limited to **3 requests per minute** to thwart bot automated registrations.
+* **Secure Credential Storage**: Passwords are saved exclusively as salted SHA-256 hashes generated by `werkzeug.security.generate_password_hash`.
+* **Session Protection**: Hardened session cookies configured with `SESSION_COOKIE_HTTPONLY = True` and `SESSION_COOKIE_SAMESITE = 'Lax'`.
+* **Security Response Headers**: Every response injects `X-Frame-Options: SAMEORIGIN` (clickjacking mitigation) and `X-Content-Type-Options: nosniff` (MIME-sniffing prevention).
+* **Two-Factor Authentication Support (`/verify_otp`)**: Dedicated verification handler supporting OTP validation against database records.
 
-### 📱 Two-Factor Authentication (OTP)
-* **One-Time Passcode**: Automatically generates an OTP upon account registration.
-* **Account Verification**: Users must verify their OTP via `/verify_otp` before their account status is marked as eligible (`is_verified = 1`).
+### Biometric Verification & Anti-Impersonation
+* **Live Webcam Integration**: The ballot submission interface (`/vote`) accesses voter hardware via HTML5 `navigator.mediaDevices.getUserMedia` and captures a live camera frame onto a hidden `<canvas>`.
+* **Gender Analysis Check**: Analyzes live voter imagery via `DeepFace.analyze(photo_path, actions=['gender'], enforce_detection=False)`. If a voter registered as Male exhibits dominant gender prediction of `woman` (or vice-versa), the vote is rejected and the uploaded snapshot is purged.
+* **Anti-Impersonation / Cross-Voter Facial Deduplication**: Compares the live face snapshot against all past voter snapshots in `vote_logs` using `DeepFace.verify` with the `Facenet` model and `opencv` detector. If a match is detected (`result["verified"] == True`), the ballot is rejected with an explicit notification that the face was previously used.
+* **Graceful ML Degradation**: Wrapped in a resilient `try...except` block in `app.py`, allowing the platform to run seamlessly even on minimal environments without GPU acceleration.
 
-### 🗳️ Secure Voting & Facial Matching
-* **Biometric Verification at Ballot Box**: When casting a vote, the voter submits a webcam capture. DeepFace compares the live snapshot against the stored registration portrait to confirm identity.
-* **Duplicate Vote Prevention**: The backend verifies `voted == 0`. Once cast, the voter's status is permanently set to `voted = 1`, blocking subsequent attempts.
-* **Voting Receipt**: Automatically generates a unique, timestamped ballot receipt (`/receipt`) confirming candidate selection.
+### Ballot Casting & Election Lifecycle
+* **Candidate Selection**: Dynamic ballot grid rendering candidate details and custom avatar graphics (`static/bhargav.png`, `static/karthikeya.png`, `static/saketh.png`).
+* **Strict Single-Vote Enforcement**: Enforces `voted == 0` check; upon submission, atomically marks `voted = 1` in `users` and records ballot metadata in `vote_logs`.
+* **Rate-Limited Ballot Casting (`/cast_vote`)**: Restricted to **1 vote per second** to prevent automated ballot stuffing.
+* **Election Countdown & Deadline Locking**: Global election deadline stored in SQLite `settings` table. When `datetime.now() >= election_deadline`, ballot submission is locked, and voters are redirected to results. Real-time endpoint `/api/deadline` provides status to the UI countdown timer.
+* **Digital Ballot Receipt (`/receipt`)**: Generates an auditable receipt with a unique identifier (`VOTE-XXXXXXXXXX`), timestamp, and selected candidate name.
 
-### 📊 Real-Time Election Results
-* **Dynamic Ballot Counts**: Live tallying of votes per candidate accessible at `/result`.
-* **Visual Standings**: Candidate cards featuring candidate avatars, badges, and current vote counts.
+### Real-Time Results & Live Analytics
+* **Public Tally (`/results`)**: Displays live standings and vote totals per candidate sorted descending.
+* **REST API Endpoint (`/api/results`)**: Returns real-time JSON candidate vote tallies (`[{"name": "...", "votes": N}]`) for asynchronous polling and client charts.
 
-### 🛡️ Admin Dashboard & Governance
-* **Election Management**: Protected admin interface (`/admin`) for election officials.
-* **Ballot Maintenance**: Add new candidates, update candidate avatars, or remove candidates.
-* **Audit & Revocation**: View audit logs (`vote_logs`), monitor voter turnout, and revoke votes if fraudulent activity is identified.
-
-### ⚙️ DevOps & Security Controls
-* **Rate Limiting**: Integrated `Flask-Limiter` protects endpoints (`/login`, `/register`, `/vote`) from brute-force and denial-of-service attacks.
-* **Security Headers**: Injects `X-Frame-Options: SAMEORIGIN` and `X-Content-Type-Options: nosniff` into HTTP responses.
-* **Dark / Light Mode**: Client-side theme toggle with local storage persistence.
+### Administrative Governance & Fraud Auditing
+* **Restricted Administration Portal (`/admin`)**: Exclusively accessible to authenticated `admin` accounts.
+* **Comprehensive Audit Trail**: Displays complete voting transaction logs, voter username, selected candidate, timestamp, voter IP address, and voter facial snapshots.
+* **IP Anomaly Detection**: Automatically flags IP addresses that submitted multiple votes (`GROUP BY ip_address HAVING count > 1`) to alert election supervisors to ballot stuffing or shared proxy anomalies.
+* **Ballot Maintenance**: Live additions (`/admin/candidate/add`) and deletions (`/admin/candidate/delete/<id>`) of candidate entries.
+* **Election Deadline Adjustment**: Real-time modification of the election cutoff timestamp (`/admin/settings/deadline`).
+* **Vote Revocation (`/revoke_vote/<id>`)**: Administrative action to invalidate fraudulent votes, automatically decrementing candidate vote tallies, resetting user status to `voted = 0`, and purging the log entry.
+* **Audit CSV Export (`/admin/export`)**: Exports complete voting logs as a downloadable CSV (`vote_logs.csv`) containing Receipt ID, Timestamp, Username, Candidate Picked, and IP Address.
 
 ---
 
 ## 3. Technology Stack
 
-### Backend
-* **Python (3.14+)**: Core application runtime.
-* **Flask (3.0.0)**: Lightweight WSGI web framework.
-* **SQLite3**: Relational embedded database (`database.db`).
-* **DeepFace (0.0.101) & TF-Keras**: Facial recognition, verification, and gender detection.
-* **Werkzeug (3.1.x)**: Security utilities and password hashing.
-* **Flask-Limiter (3.8.0)**: Request rate limiting and IP throttling.
-* **Gunicorn (21.2.0)**: Production WSGI server (for Unix/container deployments).
-
-### Frontend
-* **HTML5**: Semantic markup with Jinja2 templating.
-* **CSS3**: Responsive stylesheet (`static/style.css`) with CSS custom properties for theming.
-* **JavaScript (Vanilla)**: Theme toggling, client-side validation, and UI interaction.
-
-### DevOps & CI/CD
-* **Git**: Distributed version control and GitHub Flow.
-* **GitHub**: Remote repository hosting, branch protection, and Pull Requests.
-* **Jenkins**: Automation server executing a Declarative Pipeline with 9 distinct stages.
-* **PowerShell & Windows CMD**: Scripting and automation runner on Windows build agents.
+| Layer | Component | Version / Specification | Description |
+| :--- | :--- | :--- | :--- |
+| **Backend Runtime** | Python | 3.10+ / 3.14 | Core language runtime |
+| **Web Framework** | Flask | 3.0.0 | Lightweight WSGI web framework |
+| **WSGI Server** | Gunicorn | 21.2.0 | Production-ready HTTP WSGI server |
+| **Database** | SQLite3 | 3.x (Built-in) | Serverless relational storage (`database.db`) |
+| **Biometric ML** | DeepFace & TF-Keras | 0.0.101 | Face recognition, Facenet verification, gender analysis |
+| **Security & Rate Limiting** | Werkzeug & Flask-Limiter | 3.1.x / 3.8.0 | Password hashing, security headers, IP request throttling |
+| **Frontend** | HTML5 / Jinja2 / CSS3 / JS | Semantic / CSS Vars | Responsive dark/light theme, webcam canvas streaming |
+| **CI/CD Automation** | Jenkins | 2.400+ Declarative | 9-stage automated validation, testing, deployment |
+| **VCS & Hosting** | Git / GitHub | 2.x | GitHub Flow, pull requests, branch protection |
 
 ---
 
-## 4. Project Architecture
-
-The architecture segregates developer contribution, CI/CD orchestration, web runtime, and persistence:
+## 4. System Architecture
 
 ```mermaid
 flowchart TD
-    subgraph Development [GitHub Collaboration Flow]
-        Dev[Collaborator Terminal] -->|git commit & push| FB[Feature Branches: feature-login / feature/jenkins-ci]
-        FB -->|Pull Request| PR[GitHub Pull Request & Review]
-        PR -->|Merged| Main[main Branch]
+    subgraph Git_Collaboration [GitHub Collaboration Flow]
+        Developer[Developer Terminal] -->|git commit & push| FeatureBranch[Branch: feature/readme-documentation]
+        FeatureBranch -->|Pull Request| PullReq[GitHub PR Targeting main]
+        PullReq -->|Peer Review & Approval| MainBranch[Branch: main]
     end
 
-    subgraph CI_CD [Jenkins CI/CD Automation]
-        Main -->|Git SCM Poll / Webhook| J_Check[Checkout SCM]
-        J_Check --> J_Env[Environment Validation]
-        J_Env --> J_Dep[Dependency Installation]
-        J_Dep --> J_Code[Code Validation & Syntax]
-        J_Code --> J_Test[Automated Unit Tests]
-        J_Test --> J_Build[Build & Packaging]
-        J_Build --> J_Gate{Manual Deploy Approval}
-        J_Gate -->|Approved| J_Deploy[Deploy to Staging C:\deploy]
-        J_Deploy --> J_Smoke[Automated Smoke Test HTTP 200]
+    subgraph CI_CD_Engine [Jenkins CI/CD Automation Pipeline]
+        MainBranch -->|Poll SCM / Webhook| Checkout[Stage 1: SCM Checkout]
+        Checkout --> EnvCheck[Stage 2: Environment Validation]
+        EnvCheck --> DepInstall[Stage 3: pip install -r requirements.txt]
+        DepInstall --> SyntaxCheck[Stage 4: py_compile app.py test_app.py]
+        SyntaxCheck --> UnitTest[Stage 5: unittest test_app.py]
+        UnitTest --> BuildPkg[Stage 6: Build & Packaging]
+        BuildPkg --> GateApproval{Stage 7: Manual Deploy Approval}
+        GateApproval -->|Approved| LocalDeploy[Stage 8: Deploy to C:\deploy\online_voting_system]
+        LocalDeploy --> SmokeCheck[Stage 9: Automated Health Check HTTP 200]
     end
 
-    subgraph Runtime [Deployed Web Application]
-        J_Smoke --> FlaskApp[Flask App Server: Port 5000]
-        FlaskApp <--> SQLite[(SQLite: database.db)]
-        FlaskApp <--> Templates[Jinja2 Templates]
-        FlaskApp <--> Static[Static CSS / JS / Avatars]
-        FlaskApp <--> DeepFaceMod[DeepFace Biometric Verification]
-        User[Voter Browser] -->|HTTP / HTTPS| FlaskApp
+    subgraph Runtime_Env [Deployed Web Application Runtime]
+        SmokeCheck --> FlaskServer[Flask Web Server :5000]
+        ClientBrowser[Voter / Admin Browser] <-->|HTTP / Webcam Stream| FlaskServer
+        FlaskServer <--> SQLiteDB[(SQLite: database.db)]
+        FlaskServer <--> DeepFaceEngine[DeepFace / Facenet Engine]
+        FlaskServer <--> FileSystem[Static Assets & Uploads]
     end
 ```
 
 ---
 
-## 5. Project Structure
+## 5. Repository Structure
 
 ```text
 online_voting_system/
-├── .gitignore            # Version control exclusions (__pycache__, database.db, uploads, .env)
-├── Jenkinsfile           # 9-stage Declarative Jenkins CI/CD pipeline definition
-├── README.md             # Complete project and DevOps documentation
-├── app.py                # Core Flask backend (routes, auth, database schemas, face verification)
-├── database.db           # SQLite database file (generated at runtime, excluded from Git)
-├── requirements.txt      # Python package dependencies (Flask, DeepFace, Limiter, etc.)
-├── test_app.py           # Automated unit test suite (compilation, template validation, DB schemas)
+├── .gitignore            # Excludes bytecode (__pycache__), database.db, dynamic uploads, virtual environments
+├── Jenkinsfile           # 9-stage Declarative Jenkins CI/CD pipeline definition with UTF-8 support
+├── README.md             # Authoritative technical and operational documentation
+├── requirements.txt      # Project Python dependencies (Flask, Gunicorn, DeepFace, tf-keras, Flask-Limiter)
+├── test_app.py           # Automated test suite (syntax compilation, template parsing, schema creation)
+├── app.py                # Core Flask backend (routing, SQLite schemas, DeepFace verification, admin API)
+├── database.db           # SQLite database generated at runtime (pre-seeded with demo candidates/users)
 ├── static/               # Client-side static assets
-│   ├── style.css         # UI stylesheet and responsive dark/light mode rules
-│   ├── script.js         # Client-side script handling
-│   ├── bhargav.png       # Candidate avatar
-│   ├── karthikeya.png    # Candidate avatar
-│   ├── saketh.png        # Candidate avatar
-│   └── uploads/          # Directory storing registered voter face captures
-│       └── .gitkeep      # Preserves uploads directory structure in Git
-└── templates/            # Jinja2 HTML templates
+│   ├── style.css         # Responsive styling, glassmorphism design, and dark/light mode themes
+│   ├── script.js         # Client-side helpers
+│   ├── bhargav.png       # Candidate avatar: Bhargav
+│   ├── karthikeya.png    # Candidate avatar: Karthikeya
+│   ├── saketh.png        # Candidate avatar: Saketh
+│   └── uploads/          # Directory holding captured biometric vote JPEG files (receipt_id.jpg)
+└── templates/            # Jinja2 presentation templates
     ├── home.html         # Landing page
-    ├── login.html        # Voter authentication form
-    ├── register.html     # Voter registration and photo upload
-    ├── verify_otp.html   # OTP two-factor verification
-    ├── vote.html         # Ballot paper and face verification
-    ├── receipt.html      # Post-vote confirmation receipt
-    ├── results.html      # Live candidate vote tallies
-    └── admin.html        # Election administration dashboard
+    ├── login.html        # Authentication interface
+    ├── register.html     # Voter demographic sign-up interface
+    ├── verify_otp.html   # OTP two-factor verification screen
+    ├── vote.html         # Candidate ballot selection with live webcam capture stream
+    ├── receipt.html      # Post-ballot cryptographic receipt display
+    ├── results.html      # Real-time election standings and leaderboard
+    └── admin.html        # Restricted administrative audit and election oversight dashboard
 ```
 
 ---
 
-## 6. Installation and Setup
+## 6. Installation & Local Setup
 
 ### Prerequisites
 * **Operating System**: Windows 10/11, macOS, or Linux.
-* **Python**: Python 3.10 to 3.14 installed with `pip` and added to system `PATH`.
+* **Python**: Python 3.10 to 3.14 (with `pip` and added to system `PATH`).
 * **Git**: Git 2.x installed.
-* **Jenkins** *(optional for local app execution, required for CI/CD)*: Jenkins running on port 8080 with Java 17 or 21 LTS.
+* **Webcam**: Required for biometric face snapshot capture during vote submission.
+* **Jenkins** *(optional for local testing; required for pipeline orchestration)*: Java 17/21 LTS with Jenkins on port 8080.
 
-### Local Setup Instructions
+### Step-by-Step Installation
 
 1. **Clone the Repository**:
-   ```powershell
+   ```bash
    git clone https://github.com/reddykajakarthikeya-sketch/online_voting_system.git
    cd online_voting_system
    ```
 
-2. **Create and Activate a Virtual Environment** *(recommended)*:
+2. **Create and Activate a Virtual Environment**:
    ```powershell
-   # Windows PowerShell:
+   # Windows (PowerShell):
    python -m venv venv
    .\venv\Scripts\Activate.ps1
 
@@ -190,220 +200,263 @@ online_voting_system/
    pip install -r requirements.txt
    ```
 
-4. **Initialize Database**:
+4. **Initialize the Database**:
    ```powershell
-   python -c "import app; app.init_db(); print('Database schema successfully initialized.')"
+   python -c "import app; app.init_db(); print('Database schemas initialized successfully.')"
    ```
 
-5. **Start Application**:
+5. **Start the Development Server**:
    ```powershell
    python app.py
    ```
-   The application runs by default on `http://127.0.0.1:5000`.
+   Access the running application at **`http://localhost:5000`**.
+
+### Default Pre-seeded Credentials
+
+When `app.init_db()` executes, it automatically configures default candidates and accounts if the tables are empty:
+
+| Username | Default Password | Role | Purpose |
+| :--- | :--- | :--- | :--- |
+| `admin` | `admin123` | Administrator | Access `/admin` audit dashboard, candidate controls, and logs |
+| `harshith` | `password123` | Voter | Pre-configured eligible voter account |
+| `pragnay` | `password123` | Voter | Pre-configured eligible voter account |
+| `yashwnath` | `password123` | Voter | Pre-configured eligible voter account |
+| `chandra` | `password123` | Voter | Pre-configured eligible voter account |
+
+*Pre-seeded Candidates*: **Saketh**, **Karthikeya**, **Bhargav**.
 
 ---
 
-## 7. Usage & Application Workflows
+## 7. Application Usage & Workflows
 
 ### Standard Voter Workflow
-1. **Navigate to Home**: Open `http://localhost:5000` and click **Register Free** or navigate to `/register`.
-2. **Account Registration**: Complete registration details, attach a clear facial portrait photo, and submit.
-3. **Verify OTP**: Input the generated verification code on `/verify_otp`.
-4. **Sign In**: Log in at `/login` using registered credentials.
-5. **Cast Ballot**: Navigate to `/vote`, select your candidate, provide your live biometric camera capture, and submit your vote.
-6. **Download Receipt**: Receive a confirmation receipt on `/receipt`.
-7. **View Results**: Visit `/result` to observe live election standings.
 
-### Administrator Workflow
-1. Navigate to `/login` and enter administrator credentials.
-2. Access the protected dashboard at `/admin`.
-3. Add candidate names and upload custom candidate avatar images.
-4. Inspect vote logs, review registered users, or revoke compromised votes.
+1. **Accessing the Portal**: Open `http://localhost:5000`. Unauthenticated visitors land on the Login screen.
+2. **Registration**: Navigate to `/register` to create a new profile (first name, last name, age, gender, email, username, password).
+3. **Authentication**: Sign in at `/login`. Successful authentication starts a secure session and routes to `/vote`.
+4. **Casting a Ballot (`/vote`)**:
+   - Verify the countdown timer indicates voting is open.
+   - Choose a candidate card.
+   - Grant browser webcam access. The system activates the live preview stream and prepares the hidden canvas capture.
+   - Click **Submit Secure Vote**.
+5. **Biometric Validation (`/cast_vote`)**:
+   - The server decodes the webcam snapshot to `static/uploads/<receipt_id>.jpg`.
+   - `DeepFace` verifies gender alignment with the registered gender.
+   - `DeepFace` verifies that this facial image has not been registered in past `vote_logs` under another identity.
+   - If validations pass, votes increment, voter status locks (`voted = 1`), and a unique receipt is stored.
+6. **Digital Receipt**: Automatically redirected to `/receipt` to view and save the official ballot confirmation.
+7. **Viewing Results**: Check live vote tallies at `/results`.
+
+### Administrator Governance Workflow
+
+1. Sign in with username `admin` and password `admin123`.
+2. Navigate to `/admin`.
+3. **Audit Trail**: Review all cast ballots, timestamps, chosen candidates, voter IP addresses, and captured face snapshots.
+4. **IP Anomaly Detection**: Review the highlighted alert banner showing IPs that cast multiple votes.
+5. **Vote Invalidation**: If an anomaly or fraud is verified, click **Revoke Vote** to roll back candidate votes, reactivate voter eligibility, and purge the audit record.
+6. **Election Schedule**: Set new election cutoff deadlines via the ISO datetime picker.
+7. **Candidate Management**: Dynamically add new candidates or remove existing ones from the ballot.
+8. **Export**: Click **Export Audit Log (CSV)** to download `vote_logs.csv`.
 
 ---
 
 ## 8. GitHub Collaboration Workflow
 
-The project follows strict **GitHub Flow** to ensure `main` remains production-ready at all times:
+The project adheres to **GitHub Flow** to ensure high code quality, peer review, and zero downtime on the `main` branch.
 
 ```text
-main ─────────────────────────────────────────────────────────────► [PR Merged] ──► Jenkins CI/CD
+main ─────────────────────────────────────────────────────────────► [PR Approved & Merged] ──► Jenkins CI/CD
   │                                                                     ▲
-  └──► git checkout -b feature/<name> ──► [Commits] ──► git push ───────┤
+  └──► git checkout -b feature/<task> ──► [Commits] ──► git push ───────┤
 ```
 
-### 1. Feature Branch Creation
-No developer commits directly to `main`. Every new capability is developed on an isolated branch:
-```powershell
-git checkout main
-git pull origin main
-git checkout -b feature/<feature-name>
-```
+### Collaboration Steps
 
-### 2. Making and Staging Changes
-Stage modified files selectively and commit with clear, conventional messages:
-```powershell
-git add templates/login.html
-git commit -m "feat(auth): add autofocus and autocomplete attributes to login form"
-```
+1. **Synchronize Main**:
+   ```powershell
+   git checkout main
+   git pull origin main
+   ```
 
-### 3. Pushing and Upstream Tracking
-Push the branch to GitHub:
-```powershell
-git push -u origin feature/<feature-name>
-```
+2. **Branch from Main**:
+   Use structured naming conventions (`feature/*`, `fix/*`, `docs/*`, `ci/*`):
+   ```powershell
+   git checkout -b feature/readme-documentation
+   ```
 
-### 4. Opening a Pull Request (PR)
-* Open a PR on GitHub targeting `base: main` from `compare: feature/<feature-name>`.
-* Include a structured description explaining:
-  * Summary of changes.
-  * Modified files.
-  * Code review checklist (functionality, code quality, security, and tests).
+3. **Stage and Commit Changes**:
+   Stage only the relevant files and adhere to Conventional Commits:
+   ```powershell
+   git add README.md
+   git commit -m "docs: add comprehensive project README"
+   ```
 
-### 5. Review, Approval, and Merging
-* Assign peer reviewers (collaborators) in GitHub.
-* Review line-by-line diffs in **Files changed**.
-* Once approved, merge using **Create a merge commit** to preserve project history.
+4. **Push Upstream**:
+   ```powershell
+   git push -u origin feature/readme-documentation
+   ```
+
+5. **Open Pull Request (PR)**:
+   - Target `base: main` from `compare: feature/readme-documentation`.
+   - Provide a concise description of changes, motivation, test verification, and file impacts.
+   - Request review from team members.
+
+6. **Peer Review & Non-Fast-Forward Merge**:
+   - At least one peer review is required before merging.
+   - Merge into `main` using **Create a merge commit** to preserve traceable history.
 
 ---
 
 ## 9. Jenkins CI/CD Pipeline
 
-The repository integrates a multi-stage Declarative Pipeline (`Jenkinsfile`) designed for Windows environments with UTF-8 encoding support.
+The project incorporates an automated Declarative Pipeline via `Jenkinsfile` executing across 9 discrete stages on Windows build agents.
 
-### Pipeline Stages Overview
+### Pipeline Architecture & Stages
 
-| Stage | Name | Action & Verification |
+| Stage # | Stage Name | Description & Execution Commands |
 | :---: | :--- | :--- |
-| **1** | **Checkout SCM** | Clones the target commit from `origin/main` into the Jenkins workspace. |
-| **2** | **Environment Validation** | Asserts availability of `python`, `pip`, and `git` versions. |
-| **3** | **Dependency Installation** | Upgrades `pip` and installs packages from `requirements.txt`. |
-| **4** | **Code Validation** | Compiles bytecode using `python -m py_compile app.py test_app.py` to catch syntax errors. |
-| **5** | **Automated Testing** | Executes `python -m unittest test_app.py` (3 test suites verifying templates, DB, and syntax). |
-| **6** | **Build & Package** | Packages and validates deployable application modules. |
-| **7** | **Deploy Approval** | Interactive manual gate prompting the operator: *"Do you want to deploy the application to local staging?"* |
-| **8** | **Deploy Locally (Staging)** | Synchronizes production files to `C:\deploy\online_voting_system` and initializes `database.db`. |
-| **9** | **Automated Health Check** | Queries Flask test client on `GET /` and asserts HTTP 200 OK. |
+| **1** | **Checkout SCM** | Fetches the latest source code from GitHub repository (`checkout scm`). |
+| **2** | **Environment Validation** | Validates build agent prerequisites (`python --version`, `pip --version`, `git --version`). |
+| **3** | **Dependency Installation** | Upgrades `pip` and installs dependencies from `requirements.txt`. |
+| **4** | **Code Validation** | Enforces syntax validation and bytecode compilation: `python -m py_compile app.py test_app.py`. |
+| **5** | **Automated Testing** | Executes unit tests via `python -m unittest test_app.py` covering compilation, templates, and database schemas. |
+| **6** | **Build & Package** | Generates verified bytecode build artifacts: `python -m py_compile app.py`. |
+| **7** | **Deploy Approval** | Interactive manual gate pausing execution for operator authorization: `input message: 'Do you want to deploy the application to local staging?', ok: 'Deploy'`. |
+| **8** | **Deploy Locally (Staging)** | Synchronizes files to `C:\deploy\online_voting_system` via `xcopy` and provisions schemas via `python -c "import app; app.init_db()"`. |
+| **9** | **Automated Health Check** | Executes an automated smoke test against the deployed instance: verifies `GET /` responds with `HTTP 200 OK`. |
 
-### Pipeline Configuration in Jenkins
-1. Open Jenkins at `http://localhost:8080`.
-2. Click **New Item** → Name: `Online-Voting-System` → Select **Pipeline** → Click **OK**.
-3. Under **Pipeline**:
+### Windows UTF-8 Encoding Fix
+
+Windows consoles default to Code Page 1252 (`cp1252`), which causes fatal `UnicodeEncodeError` exceptions when deep learning libraries (TensorFlow, DeepFace) or test runners output Unicode characters.
+
+The pipeline explicitly enforces UTF-8 encoding across all Windows batch steps via top-level environment variables:
+
+```groovy
+environment {
+    PYTHONUTF8 = '1'
+    PYTHONIOENCODING = 'utf-8'
+}
+```
+
+### Jenkins Job Configuration
+
+1. Log into Jenkins (`http://localhost:8080`).
+2. Select **New Item** → Name: `online-voting-system` → Choose **Pipeline** → Click **OK**.
+3. Under the **Pipeline** configuration tab:
    * **Definition**: `Pipeline script from SCM`
    * **SCM**: `Git`
    * **Repository URL**: `https://github.com/reddykajakarthikeya-sketch/online_voting_system.git`
-   * **Branch Specifier**: `*/main`
+   * **Branches to build**: `*/main`
    * **Script Path**: `Jenkinsfile`
-4. Click **Save**.
-
-### Automated Trigger Options
-* **Manual**: Click **Build Now** on the job dashboard.
-* **Poll SCM**: Configure `H/5 * * * *` to check GitHub for new commits every 5 minutes.
-* **GitHub Webhook**: Configure GitHub Repository **Settings → Webhooks** pointing to `http://<JENKINS_HOST>:8080/github-webhook/` (requires a public IP or tunnel like ngrok).
+4. Click **Save** and trigger builds manually via **Build Now** or via GitHub Webhooks.
 
 ---
 
-## 10. Continuous Deployment (CD)
+## 10. Continuous Deployment (CD) & Staging
 
-### Target Environment & Execution
-* **Target Path**: `C:\deploy\online_voting_system`
-* **Artifact Synchronization**: Uses Windows `xcopy` and `copy` commands to transfer `app.py`, `requirements.txt`, `templates/`, and `static/`.
-* **Database Setup**: The pipeline executes `python -c "import app; app.init_db()"` inside the staging directory to provision `users`, `candidates`, and `vote_logs` tables.
-* **Automated Smoke Test**: Probes the deployed application directly:
+* **Staging Target**: `C:\deploy\online_voting_system`
+* **File Synchronization**: The pipeline copies `app.py`, `requirements.txt`, `templates/`, and `static/` directly to the deployment directory.
+* **Database Migration**: Executes schema initialization inside the staging directory to ensure tables (`users`, `candidates`, `vote_logs`, `settings`) are created.
+* **Automated Smoke Test Verification**:
+  ```powershell
+  cd /d "C:\deploy\online_voting_system"
+  python -c "from app import app; client = app.test_client(); res = client.get('/'); assert res.status_code == 200, f'Expected 200, got {res.status_code}'; print('Health Check Passed: HTTP 200 OK')"
+  ```
+* **Launching Deployed Staging Instance**:
   ```powershell
   cd C:\deploy\online_voting_system
-  python -c "from app import app; client = app.test_client(); res = client.get('/'); assert res.status_code == 200; print('Health Check Passed: HTTP 200 OK')"
+  python app.py
   ```
-
-### Accessing the Deployed Application
-To launch the deployed instance:
-```powershell
-cd C:\deploy\online_voting_system
-python app.py
-```
-Open **`http://localhost:5000`** in your browser.
 
 ---
 
-## 11. Testing
+## 11. Automated Testing Suite
 
-The automated test suite is housed in [`test_app.py`](file:///C:/Users/Kr809/OneDrive/Desktop/online_voting_system/test_app.py) and utilizes Python's standard `unittest` framework:
+Automated testing is maintained in [`test_app.py`](file:///C:/Users/Kr809/OneDrive/Desktop/online_voting_system/test_app.py) using Python's built-in `unittest` runner:
 
-1. **`test_app_compilation`**: Ensures `app.py` compiles to bytecode without syntax flaws.
-2. **`test_templates_exist_and_render`**: Iterates through all 8 Jinja2 HTML templates (`home.html`, `login.html`, `register.html`, `vote.html`, `results.html`, `admin.html`, `verify_otp.html`, `receipt.html`) and verifies they load without template parsing errors.
-3. **`test_database_schema`**: Tests table creation in an isolated `:memory:` SQLite instance to verify schema integrity.
+1. **`test_app_compilation`**: Compiles `app.py` using `py_compile.compile` with `doraise=True` to catch syntax defects before packaging.
+2. **`test_templates_exist_and_render`**: Loads Jinja2 file-system environment and verifies that all 8 primary application templates exist and parse cleanly without syntax errors:
+   - `home.html`, `login.html`, `register.html`, `vote.html`, `results.html`, `admin.html`, `verify_otp.html`, `receipt.html`.
+3. **`test_database_schema`**: Instantiates an isolated in-memory SQLite database (`:memory:`), executes table definitions for `users`, `candidates`, and `vote_logs`, and queries `sqlite_master` to assert all schema components are intact.
 
-### Running Tests Locally
+### Executing Tests Locally
 
 ```powershell
-# Run with Python standard unittest runner:
+# Standard Python unittest:
 python -m unittest test_app.py
 
-# Run with pytest (if installed):
+# Verbose execution with discovery:
+python -m unittest -v test_app.py
+
+# Pytest execution (if installed):
 python -m pytest test_app.py -v
 ```
 
 ---
 
-## 12. Troubleshooting Guide
+## 12. Troubleshooting & Diagnostics
 
-### 1. `UnicodeEncodeError: 'charmap' codec can't encode characters`
-* **Symptom**: Jenkins build or terminal fails with `charmap codec can't encode character \u26a0\ufe0f`.
-* **Root Cause**: Windows CMD defaults to code page `cp1252`, which cannot print Unicode warning symbols emitted by DeepFace or TensorFlow.
-* **Solution**: Ensure `PYTHONUTF8 = '1'` and `PYTHONIOENCODING = 'utf-8'` are defined in the environment.
-
-### 2. `Invalid requirement: UTF-16 Null Bytes in requirements.txt`
-* **Symptom**: `pip install -r requirements.txt` throws `Expected semicolon or end`.
-* **Root Cause**: Appending to files in PowerShell using `>` or `Out-File` can write UTF-16 LE with null bytes (`\x00`).
-* **Solution**: Ensure `requirements.txt` is encoded strictly in UTF-8 without BOM.
-
-### 3. DeepFace / TensorFlow Import Failure
-* **Symptom**: Server fails to start if machine learning libraries have version mismatches.
-* **Solution**: `app.py` wraps the `DeepFace` import inside a `try...except` block:
-  ```python
-  try:
-      from deepface import DeepFace
-  except Exception:
-      DeepFace = None
-  ```
-  This ensures database initialization, authentication, and core routing remain 100% operational.
-
-### 4. Jenkins Port 8080 or Flask Port 5000 Already in Use
-* **Check Port Occupancy**:
+### 1. `UnicodeEncodeError: 'charmap' codec can't encode character`
+* **Symptom**: Jenkins build or Windows CMD crashes when printing emojis or ML library logs.
+* **Remedy**: Set environment variables before running Python:
   ```powershell
-  Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue
-  Get-NetTCPConnection -LocalPort 8080 -ErrorAction SilentlyContinue
+  $env:PYTHONUTF8="1"
+  $env:PYTHONIOENCODING="utf-8"
   ```
-* **Restart Jenkins Service**:
+  *(Already configured globally in `Jenkinsfile`).*
+
+### 2. DeepFace / TensorFlow First-Run Initialization
+* **Symptom**: The first vote verification takes several seconds.
+* **Remedy**: DeepFace automatically downloads pre-trained `Facenet` model weights (~90 MB) into `~/.deepface/weights/` on its first invocation. Ensure an active Internet connection during the initial run. Subsequent verifications will use the local cached weights.
+
+### 3. Port Conflicts (`Address already in use: 5000` or `8080`)
+* **Symptom**: Flask fails to bind to port 5000, or Jenkins fails on port 8080.
+* **Remedy**: Identify and terminate the occupying process in PowerShell:
   ```powershell
-  Restart-Service Jenkins
+  # Find PID occupying port 5000:
+  Get-NetTCPConnection -LocalPort 5000 -ErrorAction SilentlyContinue | Select-Object OwningProcess
+
+  # Terminate process by PID:
+  Stop-Process -Id <PID> -Force
   ```
+
+### 4. Database Locked (`sqlite3.OperationalError: database is locked`)
+* **Symptom**: Concurrent write contention causes SQLite locking exceptions.
+* **Remedy**: Ensure long-running transactions close cursors and database connections immediately inside `finally` blocks. Ensure write permissions on `database.db`.
 
 ---
 
 ## 13. Contributing Guidelines
 
-1. **Fork or Clone**: Ensure your local copy is synchronized with `upstream/main`.
-2. **Create a Feature Branch**: Follow naming conventions:
-   * `feature/<feature-name>` for new features.
-   * `fix/<bug-description>` for bug fixes.
-   * `ci/<pipeline-update>` for Jenkinsfile adjustments.
-3. **Validate Locally**: Run `python -m unittest test_app.py` before committing.
-4. **Open a Pull Request**: Submit your PR targeting `main`, complete the review checklist, and request a review from a maintainer.
-5. **No Direct Pushes to `main`**: All changes must pass CI validation and code review.
+We welcome contributions! Please adhere to our standardized process:
+
+1. **Fork or Clone**: Keep your clone updated with `origin/main`.
+2. **Feature Branches**: Branch off `main` with descriptive names:
+   * `feature/<feature-name>` for enhancements.
+   * `fix/<bug-name>` for bug fixes.
+   * `docs/<topic>` for documentation additions.
+3. **Code Style & Integrity**:
+   * Maintain clean, commented code.
+   * Preserve docstrings and error-handling routines.
+   * Ensure tests pass before pushing: `python -m unittest test_app.py`.
+4. **Commit Hygiene**:
+   * Use Conventional Commit prefixes: `feat:`, `fix:`, `docs:`, `test:`, `ci:`.
+   * Commit only files relevant to the scope of work.
+5. **Submitting Pull Requests**:
+   * Open PR targeting `main`.
+   * Fill out the PR summary detailing changes made and verification steps.
+   * Do not merge your own PR; await peer review and approval.
 
 ---
 
-## 14. License and Acknowledgements
+## 14. License & Credits
 
 ### License
-This project is developed for educational, academic, and demonstration purposes.
+Developed as an open academic, educational, and secure voting system research project.
 
-### Acknowledgements
-* **Flask Team**: For the intuitive web framework.
-* **DeepFace & Sefik Ilkin Serengil**: For the lightweight face recognition framework.
-* **Jenkins Community**: For the open-source automation server.
-* **Collaborators & Contributors**:
-  * **Karthikeya Reddy** (`reddykajakarthikeya-sketch`)
-  * **Bhargav**
-  * **Saketh**
+### Project Team & Contributors
+* **Pragnay** ([@Pragnay869](https://github.com/Pragnay869))
+* **Karthikeya Reddy** ([@reddykajakarthikeya-sketch](https://github.com/reddykajakarthikeya-sketch))
+* **Bhargav**
+* **Saketh**
+
