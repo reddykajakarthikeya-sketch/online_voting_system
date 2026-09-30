@@ -6,3 +6,6 @@ database.db
 *.sqlite
 static/uploads/*
 !static/uploads/.gitkeep
+build_description.txt
+jenkins_dashboard.html
+test-reports/

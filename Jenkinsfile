@@ -4,6 +4,8 @@ pipeline {
     environment {
         PYTHONUTF8 = '1'
         PYTHONIOENCODING = 'utf-8'
+        GCM_INTERACTIVE = 'never'
+        GIT_TERMINAL_PROMPT = '0'
     }
 
     triggers {
@@ -44,8 +46,8 @@ pipeline {
 
         stage('Automated Testing') {
             steps {
-                echo 'Executing automated unit test suite (4 tests)...'
-                bat 'python -m unittest -v test_app.py'
+                echo 'Executing automated unit test suite with detailed metrics...'
+                bat 'python scripts/run_tests.py'
             }
         }
 
@@ -56,19 +58,20 @@ pipeline {
             }
         }
 
-        stage('Deploy Approval') {
-            when {
-                branch 'main'
+        stage('Workflow Tracking & Dashboard') {
+            steps {
+                echo 'Tracking commits, PR reviews, team contributions, and compiling workflow dashboard...'
+                bat 'python scripts/jenkins_dashboard_tracker.py'
             }
+        }
+
+        stage('Deploy Approval') {
             steps {
                 input message: 'Do you want to deploy the application to local staging?', ok: 'Deploy'
             }
         }
 
         stage('Deploy Locally (Staging)') {
-            when {
-                branch 'main'
-            }
             steps {
                 echo 'Deploying application to C:\\deploy\\online_voting_system...'
                 bat '''
@@ -77,6 +80,9 @@ pipeline {
                     xcopy /Y /E /I "static" "C:\\deploy\\online_voting_system\\static"
                     copy /Y "app.py" "C:\\deploy\\online_voting_system\\app.py"
                     copy /Y "requirements.txt" "C:\\deploy\\online_voting_system\\requirements.txt"
+                    
+                    echo Deployed Commit: %GIT_COMMIT% > "C:\\deploy\\online_voting_system\\DEPLOYED_VERSION.txt"
+                    echo Deployment Time: %DATE% %TIME% >> "C:\\deploy\\online_voting_system\\DEPLOYED_VERSION.txt"
                 '''
                 echo 'Initializing SQLite database schemas in target environment...'
                 bat '''
@@ -87,9 +93,6 @@ pipeline {
         }
 
         stage('Automated Health Check') {
-            when {
-                branch 'main'
-            }
             steps {
                 echo 'Executing automated smoke test on deployed application...'
                 bat '''
@@ -102,11 +105,24 @@ pipeline {
 
     post {
         always {
-            echo 'Pipeline execution complete.'
+            echo 'Pipeline execution complete. Updating Jenkins build description and archiving dashboard...'
+            script {
+                try {
+                    if (fileExists('build_description.txt')) {
+                        def desc = readFile('build_description.txt').trim()
+                        currentBuild.description = desc
+                    }
+                    if (fileExists('jenkins_dashboard.html')) {
+                        archiveArtifacts artifacts: 'jenkins_dashboard.html, test-reports/**', allowEmptyArchive: true
+                    }
+                } catch (Exception e) {
+                    echo "Could not set build description: ${e.message}"
+                }
+            }
         }
         success {
             echo 'SUCCESS: All CI/CD stages, automated unit tests, and validation passed!'
-            bat 'python scripts/report_status.py success "All 4 unit tests passed on Jenkins CI"'
+            bat 'python scripts/report_status.py success "All unit tests passed on Jenkins CI"'
         }
         failure {
             echo 'FAILURE: One or more pipeline stages failed. Inspect console logs.'

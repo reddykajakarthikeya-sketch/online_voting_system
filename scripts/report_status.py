@@ -1,18 +1,24 @@
+import os
 import sys
 import subprocess
 import urllib.request
 import json
 
 def get_github_token():
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        return token
     try:
+        env = dict(os.environ, GCM_INTERACTIVE="never")
         p = subprocess.Popen(
             ['git', 'credential', 'fill'],
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True
+            text=True,
+            env=env
         )
-        out, _ = p.communicate(input='protocol=https\nhost=github.com\n\n')
+        out, _ = p.communicate(input='protocol=https\nhost=github.com\n\n', timeout=3)
         creds = dict(line.split('=', 1) for line in out.strip().splitlines() if '=' in line)
         return creds.get('password')
     except Exception as e:
