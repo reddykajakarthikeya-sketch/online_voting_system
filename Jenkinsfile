@@ -13,10 +13,21 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 echo 'Checking out source code from Git...'
                 checkout scm
+            }
+        }
+
+        stage('Team Changes') {
+            steps {
+                echo '===== TEAM CONTRIBUTIONS ====='
+                bat '''
+                git log --all --date=short --pretty=format:"%%h | %%an | %%ad | %%s"
+                '''
+                echo '===== END TEAM CONTRIBUTIONS ====='
             }
         }
 
@@ -74,19 +85,28 @@ pipeline {
         stage('Deploy Locally (Staging)') {
             steps {
                 echo 'Deploying application to C:\\deploy\\online_voting_system...'
+
                 bat '''
                     if not exist "C:\\deploy\\online_voting_system" mkdir "C:\\deploy\\online_voting_system"
+
                     xcopy /Y /E /I "templates" "C:\\deploy\\online_voting_system\\templates"
+
                     xcopy /Y /E /I "static" "C:\\deploy\\online_voting_system\\static"
+
                     copy /Y "app.py" "C:\\deploy\\online_voting_system\\app.py"
+
                     copy /Y "requirements.txt" "C:\\deploy\\online_voting_system\\requirements.txt"
-                    
+
                     echo Deployed Commit: %GIT_COMMIT% > "C:\\deploy\\online_voting_system\\DEPLOYED_VERSION.txt"
+
                     echo Deployment Time: %DATE% %TIME% >> "C:\\deploy\\online_voting_system\\DEPLOYED_VERSION.txt"
                 '''
+
                 echo 'Initializing SQLite database schemas in target environment...'
+
                 bat '''
                     cd /d "C:\\deploy\\online_voting_system"
+
                     python -c "import app; app.init_db(); print('Production database initialized successfully.')"
                 '''
             }
@@ -95,8 +115,10 @@ pipeline {
         stage('Automated Health Check') {
             steps {
                 echo 'Executing automated smoke test on deployed application...'
+
                 bat '''
                     cd /d "C:\\deploy\\online_voting_system"
+
                     python -c "from app import app; client = app.test_client(); res = client.get('/'); assert res.status_code == 200, f'Expected 200, got {res.status_code}'; print('Health Check Passed: HTTP 200 OK')"
                 '''
             }
@@ -104,28 +126,36 @@ pipeline {
     }
 
     post {
+
         always {
             echo 'Pipeline execution complete. Updating Jenkins build description and archiving dashboard...'
+
             script {
                 try {
                     if (fileExists('build_description.txt')) {
                         def desc = readFile('build_description.txt').trim()
                         currentBuild.description = desc
                     }
+
                     if (fileExists('jenkins_dashboard.html')) {
                         archiveArtifacts artifacts: 'jenkins_dashboard.html, test-reports/**', allowEmptyArchive: true
                     }
+
                 } catch (Exception e) {
                     echo "Could not set build description: ${e.message}"
                 }
             }
         }
+
         success {
             echo 'SUCCESS: All CI/CD stages, automated unit tests, and validation passed!'
+
             bat 'python scripts/report_status.py success "All unit tests passed on Jenkins CI"'
         }
+
         failure {
             echo 'FAILURE: One or more pipeline stages failed. Inspect console logs.'
+
             bat 'python scripts/report_status.py failure "Jenkins build or unit tests failed"'
         }
     }
